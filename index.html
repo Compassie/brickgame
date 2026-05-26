@@ -3,17 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Stationary Brick Siege</title>
+    <title>Infinite Brick Breakout</title>
     <style>
-        /* Modern resets to prevent mobile screen bouncing and scrolling */
         * {
             box-sizing: border-box;
-            touch-action: none; /* Prevents accidental double-tap zoom on mobile */
+            touch-action: none; /* Prevents mobile page bouncing/zooming */
         }
         body {
             background-color: #0b0b10;
             color: white;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -29,15 +28,13 @@
             font-weight: bold;
             letter-spacing: 2px;
             text-transform: uppercase;
-            text-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
         }
-        /* Fluid canvas wrapper to adjust nicely for desktop or vertical phone screens */
         canvas {
             border: 3px solid #fff;
             background-color: #121218;
             box-shadow: 0 0 30px rgba(0, 255, 255, 0.15);
             max-width: 100%;
-            max-height: 80vh;
+            max-height: 85vh;
             border-radius: 8px;
         }
     </style>
@@ -55,10 +52,10 @@ const scoreDisplay = document.getElementById("score");
 let score = 0;
 let gameOver = false;
 
-// THE STATIONARY BRICK AT THE BOTTOM (Stays completely unmovable)
-const paddleHeight = 22;
-const paddleWidth = 140; 
-const paddleX = (canvas.width - paddleWidth) / 2; 
+// THE BOTTOM BRICK (PADDLE) - NOW MOVABLE BY YOU!
+const paddleHeight = 20;
+const paddleWidth = 110; 
+let paddleX = (canvas.width - paddleWidth) / 2; 
 const paddleY = canvas.height - paddleHeight - 40;
 
 // Ball Physics
@@ -66,8 +63,8 @@ let balls = [];
 const baseBallRadius = 6;
 const baseBallSpeed = 5;
 
-// RESPONSIVE BRICK GRID
-const brickRowCount = 8;       
+// BRICK WALL SETTINGS
+const brickRowCount = 6;       
 const brickColumnCount = 11;    
 const brickWidth = 46;
 const brickHeight = 18;
@@ -89,19 +86,20 @@ const TYPE_COLORS = {
 };
 
 let bricks = [];
-let rowDropInterval = 7500; 
+let rowDropInterval = 8000; // Wall drops every 8 seconds
 let lastDropTime = Date.now();
 
 function initGame() {
     score = 0;
     gameOver = false;
     scoreDisplay.innerText = score;
-    rowDropInterval = 7500;
+    rowDropInterval = 8000;
+    paddleX = (canvas.width - paddleWidth) / 2;
     
-    // Fire initial ball cleanly
+    // Spawn initial ball
     balls = [createNewBall(canvas.width / 2, paddleY - 30, 2.5, -baseBallSpeed)];
     
-    // Create brick matrix
+    // Create initial brick wall
     bricks = [];
     for (let r = 0; r < brickRowCount; r++) {
         bricks[r] = [];
@@ -117,7 +115,7 @@ function createNewBall(x, y, dx, dy, radius = baseBallRadius) {
 }
 
 function createBrick() {
-    // 15% drop rate for special modifiers keeps the challenge balanced
+    // 15% drop rate for special items (balanced difficulty)
     let type = TYPES.NORMAL;
     const rand = Math.random();
     if (rand > 0.85) { 
@@ -132,14 +130,14 @@ function dropWallDown() {
     for (let c = 0; c < brickColumnCount; c++) {
         newRow.push(createBrick()); 
     }
-    bricks.unshift(newRow); 
+    bricks.unshift(newRow); // Push rows downward
 
-    // Verify if any active descending brick touches the baseline zone
+    // If dropping wall reaches your paddle height -> Game Over
     for (let r = 0; r < bricks.length; r++) {
         for (let c = 0; c < bricks[r].length; c++) {
             if (bricks[r][c] && bricks[r][c].status === 1) {
                 let brickY = (r * (brickHeight + brickPadding)) + brickOffsetTop;
-                if (brickY + brickHeight >= paddleY - 10) {
+                if (brickY + brickHeight >= paddleY - 5) {
                     gameOver = true;
                 }
             }
@@ -153,8 +151,9 @@ function triggerBuff(type, hitRow, hitCol) {
         setTimeout(() => balls.forEach(b => b.radius = baseBallRadius), 6000);
     } 
     else if (type === TYPES.MULTI_BALL) {
-        balls.push(createNewBall(canvas.width/2, paddleY - 30, -3, -4));
-        balls.push(createNewBall(canvas.width/2, paddleY - 30, 3, -4));
+        // Multi-ball splits from your active paddle position
+        balls.push(createNewBall(paddleX + paddleWidth / 2, paddleY - 10, -3, -4));
+        balls.push(createNewBall(paddleX + paddleWidth / 2, paddleY - 10, 3, -4));
     } 
     else if (type === TYPES.EXPLOSIVE) {
         for (let dr = -1; dr <= 1; dr++) {
@@ -194,17 +193,42 @@ function collisionDetection() {
     }
 }
 
-// Mobile and Desktop Input: Tap screen or click mouse when Game Over to restart instantly
-function handleRestart() {
-    if (gameOver) {
-        initGame();
-    }
+// --- CONTROLS: FOR BOTH MOBILE AND DESKTOP ---
+
+function movePaddle(clientX) {
+    const rect = canvas.getBoundingClientRect();
+    // Convert click/touch coordinates relative to the scaling canvas
+    const relativeX = (clientX - rect.left) * (canvas.width / rect.width);
+    
+    // Snap paddle center to the mouse/finger position
+    paddleX = relativeX - paddleWidth / 2;
+    
+    // Bounds check so paddle never goes off screen edges
+    if (paddleX < 0) paddleX = 0;
+    if (paddleX > canvas.width - paddleWidth) paddleX = canvas.width - paddleWidth;
 }
-window.addEventListener("mousedown", handleRestart);
-window.addEventListener("touchstart", (e) => {
-    e.preventDefault(); // Prevents modern phone double tap delays
-    handleRestart();
+
+// Mouse Controls
+window.addEventListener("mousemove", (e) => {
+    if (!gameOver) movePaddle(e.clientX);
+});
+
+// Touch Controls (Mobile dragging)
+window.addEventListener("touchmove", (e) => {
+    if (!gameOver && e.touches.length > 0) {
+        movePaddle(e.touches[0].clientX);
+    }
 }, { passive: false });
+
+// Global Tap-to-Restart Trigger
+function handleRestart() {
+    if (gameOver) initGame();
+}
+window.addEventListener("click", handleRestart);
+window.addEventListener("touchstart", (e) => {
+    handleRestart();
+});
+
 
 function draw() {
     if (gameOver) {
@@ -221,7 +245,7 @@ function draw() {
         
         ctx.font = "16px sans-serif";
         ctx.fillStyle = "#00f0ff";
-        ctx.fillText("Tap Screen or Click to Try Again", canvas.width / 2, canvas.height / 2 + 70);
+        ctx.fillText("Tap or Click to Restart", canvas.width / 2, canvas.height / 2 + 70);
         
         requestAnimationFrame(draw);
         return;
@@ -245,7 +269,7 @@ function draw() {
         }
     }
 
-    // 2. Render Unmovable Base Brick
+    // 2. Render Your Movable Bottom Brick (Paddle)
     ctx.beginPath();
     ctx.rect(paddleX, paddleY, paddleWidth, paddleHeight);
     ctx.fillStyle = "#ffffff";
@@ -271,11 +295,11 @@ function draw() {
             ball.dy = -ball.dy;
         } 
 
-        // Perfectly accurate bounding box hit for the fixed paddle
+        // Hit logic for your movable paddle
         if (ball.y + ball.dy > paddleY - ball.radius && ball.y < paddleY + paddleHeight) {
             if (ball.x > paddleX && ball.x < paddleX + paddleWidth) {
                 let hitPoint = ball.x - (paddleX + paddleWidth / 2);
-                ball.dx = hitPoint * 0.18; // Angles away safely depending on hit point
+                ball.dx = hitPoint * 0.18; // Angles away depending on where you catch it
                 ball.dy = -Math.abs(ball.dy); 
             } 
         }
@@ -296,11 +320,11 @@ function draw() {
 
     collisionDetection();
 
-    // Automatic progression interval
+    // Automatic Wall Progression
     if (Date.now() - lastDropTime > rowDropInterval) {
         dropWallDown();
         lastDropTime = Date.now();
-        if (rowDropInterval > 3000) rowDropInterval -= 200; 
+        if (rowDropInterval > 3500) rowDropInterval -= 250; // Slowly accelerates over time
     }
 
     requestAnimationFrame(draw);
