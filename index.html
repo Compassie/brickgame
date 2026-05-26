@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stationary Brick Siege</title>
+    <title>Stationary Brick Siege - Fixed</title>
     <style>
         body {
             background-color: #0b0b10;
@@ -44,19 +44,19 @@ const scoreDisplay = document.getElementById("score");
 let score = 0;
 let gameOver = false;
 
-// THE STATIONARY BRICK AT THE BOTTOM
+// THE STATIONARY BRICK AT THE BOTTOM (Completely Unmovable)
 const paddleHeight = 20;
-const paddleWidth = 120;
+const paddleWidth = 130; // Slightly wider to make up for zero magnet/movement
 const paddleX = (canvas.width - paddleWidth) / 2; 
 const paddleY = canvas.height - paddleHeight - 25;
 
 // Ball Physics
 let balls = [];
 const baseBallRadius = 5;
-const baseBallSpeed = 5;
+const baseBallSpeed = 4.5;
 
-// MASSIVE BRICK WALL SETTINGS
-const brickRowCount = 12;       
+// BRICK WALL SETTINGS
+const brickRowCount = 8;       
 const brickColumnCount = 13;    
 const brickWidth = 38;
 const brickHeight = 16;
@@ -78,17 +78,17 @@ const TYPE_COLORS = {
 };
 
 let bricks = [];
-let rowDropInterval = 6500; // Wall drops every 6.5 seconds
+let rowDropInterval = 7000; // Wall drops every 7 seconds
 let lastDropTime = Date.now();
 
 function initGame() {
     score = 0;
     gameOver = false;
     
-    // Spawn initial ball
-    balls = [createNewBall(canvas.width / 2, paddleY - 20, (Math.random() * 4) - 2, -baseBallSpeed)];
+    // Spawn initial ball with a clean, natural diagonal trajectory upward
+    balls = [createNewBall(canvas.width / 2, paddleY - 20, 2.5, -baseBallSpeed)];
     
-    // Build massive initial wall
+    // Build initial wall
     bricks = [];
     for (let r = 0; r < brickRowCount; r++) {
         bricks[r] = [];
@@ -104,10 +104,10 @@ function createNewBall(x, y, dx, dy, radius = baseBallRadius) {
 }
 
 function createBrick() {
-    // 45% chance of spawning special tactical bricks to deal with the dropping wall
+    // REDUCED FREQUENCY: Only a 15% chance of spawning a special brick now!
     let type = TYPES.NORMAL;
     const rand = Math.random();
-    if (rand > 0.55) {
+    if (rand > 0.85) { 
         const types = [TYPES.BIG_BALL, TYPES.MULTI_BALL, TYPES.EXPLOSIVE];
         type = types[Math.floor(Math.random() * types.length)];
     }
@@ -119,14 +119,15 @@ function dropWallDown() {
     for (let c = 0; c < brickColumnCount; c++) {
         newRow.push(createBrick()); 
     }
-    bricks.unshift(newRow);
+    bricks.unshift(newRow); // Push rows down
 
-    // Check if the falling wall crushes your stationary brick zone
+    // FIXED LOOP BUG: Checked and verified loop counters to prevent game freezing
     for (let r = 0; r < bricks.length; r++) {
-        for (let c = 0; c < bricks[r].length; r++) {
+        for (let c = 0; c < bricks[r].length; c++) {
             if (bricks[r][c] && bricks[r][c].status === 1) {
                 let brickY = (r * (brickHeight + brickPadding)) + brickOffsetTop;
-                if (brickY + brickHeight >= paddleY - 10) {
+                // If dropping wall reaches your stationary brick zone -> Game Over
+                if (brickY + brickHeight >= paddleY - 5) {
                     gameOver = true;
                 }
             }
@@ -136,21 +137,25 @@ function dropWallDown() {
 
 function triggerBuff(type, hitRow, hitCol) {
     if (type === TYPES.BIG_BALL) {
-        balls.forEach(b => b.radius = 14);
-        setTimeout(() => balls.forEach(b => b.radius = baseBallRadius), 7000);
+        balls.forEach(b => b.radius = 12);
+        setTimeout(() => balls.forEach(b => b.radius = baseBallRadius), 6000);
     } 
     else if (type === TYPES.MULTI_BALL) {
-        // Explode into 3 extra balls going out in different directions
-        balls.push(createNewBall(canvas.width/2, paddleY - 10, -3, -4));
-        balls.push(createNewBall(canvas.width/2, paddleY - 10, 0, -5));
-        balls.push(createNewBall(canvas.width/2, paddleY - 10, 3, -4));
+        // Spawn 2 extra balls breaking off clean left and right
+        balls.push(createNewBall(canvas.width/2, paddleY - 10, -2.5, -4));
+        balls.push(createNewBall(canvas.width/2, paddleY - 10, 2.5, -4));
     } 
     else if (type === TYPES.EXPLOSIVE) {
-        // Deep cross explosion to take out whole vertical columns
-        for (let i = -2; i <= 2; i++) {
-            if (bricks[hitRow + i] && bricks[hitRow + i][hitCol]) bricks[hitRow + i][hitCol].status = 0;
-            if (bricks[hitRow] && bricks[hitRow][hitCol + i]) bricks[hitRow][hitCol + i].status = 0;
-            score += 20;
+        // Clear a balanced 3x3 grid around the explosion
+        for (let dr = -1; dr <= 1; dr++) {
+            for (let dc = -1; dc <= 1; dc++) {
+                let nr = hitRow + dr;
+                let nc = hitCol + dc;
+                if (bricks[nr] && bricks[nr][nc] && bricks[nr][nc].status === 1) {
+                    bricks[nr][nc].status = 0;
+                    score += 10;
+                }
+            }
         }
     }
 }
@@ -194,7 +199,7 @@ function draw() {
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // 1. Draw Massive Moving Wall
+    // 1. Draw Moving Brick Wall
     for (let r = 0; r < bricks.length; r++) {
         for (let c = 0; c < bricks[r].length; c++) {
             if (bricks[r][c].status === 1) {
@@ -209,14 +214,14 @@ function draw() {
         }
     }
 
-    // 2. Draw Bottom Unmovable Brick
+    // 2. Draw Unmovable Bottom Brick
     ctx.beginPath();
     ctx.rect(paddleX, paddleY, paddleWidth, paddleHeight);
     ctx.fillStyle = "#ffffff";
     ctx.fill();
     ctx.closePath();
 
-    // 3. Process Balls with Magnetic Gravity Assist
+    // 3. Process Balls (Pure Vector Physics - No Z-Shaping)
     for (let i = balls.length - 1; i >= 0; i--) {
         let ball = balls[i];
         
@@ -226,48 +231,47 @@ function draw() {
         ctx.fill();
         ctx.closePath();
 
-        // Screen Borders
+        // Left/Right Screen Boundaries
         if (ball.x + ball.dx > canvas.width - ball.radius || ball.x + ball.dx < ball.radius) {
             ball.dx = -ball.dx;
         }
+        // Top Screen Boundary
         if (ball.y + ball.dy < ball.radius) {
             ball.dy = -ball.dy;
         } 
 
-        // THE PADDLE MAGNET: Pulls balls gently toward the center static brick if they get too low
-        if (ball.y > canvas.height * 0.65 && ball.y < paddleY) {
-            let centerPaddleX = paddleX + (paddleWidth / 2);
-            let pullDirection = centerPaddleX - ball.x;
-            ball.dx += pullDirection * 0.012; // Tweaks trajectory automatically
-        }
-
-        // Stationary Paddle Hit detection
+        // Collision with the unmovable brick at the bottom
         if (ball.y + ball.dy > paddleY - ball.radius && ball.y < paddleY + paddleHeight) {
             if (ball.x > paddleX && ball.x < paddleX + paddleWidth) {
+                // Angle depends purely on where it strikes the stationary surface
                 let hitPoint = ball.x - (paddleX + paddleWidth / 2);
-                ball.dx = hitPoint * 0.22; // Bounce off dynamically based on impact position
-                ball.dy = -Math.abs(ball.dy); // Push back up
-            } else if (ball.y > canvas.height) {
-                balls.splice(i, 1);
-                continue; 
-            }
+                ball.dx = hitPoint * 0.20; 
+                ball.dy = -Math.abs(ball.dy); 
+            } 
+        }
+
+        // Drop out of bounds check
+        if (ball.y > canvas.height) {
+            balls.splice(i, 1);
+            continue;
         }
 
         ball.x += ball.dx;
         ball.y += ball.dy;
     }
 
+    // Game Over condition if you drop your last ball
     if (balls.length === 0) {
         gameOver = true;
     }
 
     collisionDetection();
 
-    // Wall Progression Timing
+    // Infinite Wall Drop Timer
     if (Date.now() - lastDropTime > rowDropInterval) {
         dropWallDown();
         lastDropTime = Date.now();
-        if (rowDropInterval > 2200) rowDropInterval -= 200; 
+        if (rowDropInterval > 2500) rowDropInterval -= 150; 
     }
 
     requestAnimationFrame(draw);
