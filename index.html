@@ -3,16 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Infinite Brick Breakout</title>
+    <title>Neon Brick Siege</title>
     <style>
         * {
             box-sizing: border-box;
-            touch-action: none; /* Prevents mobile page bouncing/zooming */
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
         }
         body {
-            background-color: #0b0b10;
-            color: white;
-            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            background: radial-gradient(circle at center, #181824 0%, #07070d 100%);
+            color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -20,54 +22,157 @@
             min-height: 100vh;
             margin: 0;
             overflow: hidden;
-            padding: 10px;
+            padding: 15px;
+        }
+        #ui-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 520px;
         }
         #scoreBoard {
-            font-size: 22px;
-            margin-bottom: 10px;
-            font-weight: bold;
-            letter-spacing: 2px;
+            font-size: 18px;
+            font-weight: 800;
+            letter-spacing: 3px;
             text-transform: uppercase;
+            margin-bottom: 12px;
+            color: #00f0ff;
+            text-shadow: 0 0 12px rgba(0, 240, 255, 0.4);
+            align-self: flex-start;
+        }
+        #canvas-container {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 520 / 700;
         }
         canvas {
-            border: 3px solid #fff;
-            background-color: #121218;
-            box-shadow: 0 0 30px rgba(0, 255, 255, 0.15);
-            max-width: 100%;
-            max-height: 85vh;
-            border-radius: 8px;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(15, 15, 25, 0.85);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 40px rgba(0, 240, 255, 0.05);
+            border-radius: 16px;
+        }
+        /* Elegant Glassmorphic Screen Overlay */
+        .screen-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 16px;
+            background: rgba(7, 7, 13, 0.85);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            transition: opacity 0.3s ease;
+            padding: 30px;
+            text-align: center;
+            border: 2px solid rgba(255, 255, 255, 0.05);
+        }
+        .screen-overlay h1 {
+            font-size: 32px;
+            font-weight: 900;
+            letter-spacing: 4px;
+            margin: 0 0 10px 0;
+            background: linear-gradient(45deg, #00f0ff, #00ff66);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-transform: uppercase;
+        }
+        .screen-overlay p {
+            font-size: 15px;
+            color: #8fa0ba;
+            margin: 0 0 30px 0;
+            line-height: 1.5;
+            max-width: 320px;
+        }
+        .btn {
+            background: #ffffff;
+            color: #07070d;
+            border: none;
+            padding: 14px 36px;
+            font-size: 16px;
+            font-weight: 700;
+            border-radius: 30px;
+            cursor: pointer;
+            letter-spacing: 1px;
+            box-shadow: 0 10px 25px rgba(255, 255, 255, 0.2);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .btn:active {
+            transform: scale(0.96);
+            box-shadow: 0 5px 15px rgba(255, 255, 255, 0.1);
+        }
+        .hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        #final-score {
+            font-size: 20px;
+            color: #ff0055;
+            font-weight: 700;
+            margin-bottom: 20px;
+            letter-spacing: 1px;
         }
     </style>
 </head>
 <body>
 
-    <div id="scoreBoard">Score: <span id="score">0</span></div>
-    <canvas id="gameCanvas" width="560" height="740"></canvas>
+    <div id="ui-wrapper">
+        <div id="scoreBoard">Score: <span id="score">0000</span></div>
+        <div id="canvas-container">
+            <canvas id="gameCanvas" width="520" height="700"></canvas>
+            
+            <div id="startScreen" class="screen-overlay">
+                <h1>Neon Siege</h1>
+                <p>Drag or move your touch/mouse to slide the core. Prevent the descending matrix wall from crushing you.</p>
+                <button class="btn" onclick="startGame()">Launch</button>
+            </div>
+
+            <div id="gameOverScreen" class="screen-overlay hidden">
+                <h1 style="background: linear-gradient(45deg, #ff0055, #ffcc00); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Matrix Overrun</h1>
+                <div id="final-score">Final Score: 0</div>
+                <button class="btn" onclick="startGame()">Reboot</button>
+            </div>
+        </div>
+    </div>
 
 <script>
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 const scoreDisplay = document.getElementById("score");
+const startScreen = document.getElementById("startScreen");
+const gameOverScreen = document.getElementById("gameOverScreen");
+const finalScoreDisplay = document.getElementById("final-score");
 
 let score = 0;
 let gameOver = false;
+let gameActive = false;
 
-// THE BOTTOM BRICK (PADDLE) - NOW MOVABLE BY YOU!
-const paddleHeight = 20;
-const paddleWidth = 110; 
+// THE PLAYER CORE (Bottom Brick)
+const paddleHeight = 14;
+const paddleWidth = 100; 
 let paddleX = (canvas.width - paddleWidth) / 2; 
 const paddleY = canvas.height - paddleHeight - 40;
 
-// Ball Physics
+// Ball Trajectory Mechanics
 let balls = [];
 const baseBallRadius = 6;
-const baseBallSpeed = 5;
+const baseBallSpeed = 5.5;
 
-// BRICK WALL SETTINGS
-const brickRowCount = 6;       
+// SQUARE GEOMETRY MATRIX (Perfect alignment for symbols)
 const brickColumnCount = 11;    
-const brickWidth = 46;
-const brickHeight = 18;
+const brickWidth = 42; // Perfect Square Dimensions
+const brickHeight = 42; 
 const brickPadding = 4;
 const brickOffsetTop = 50;
 const brickOffsetLeft = 11;
@@ -78,30 +183,42 @@ const TYPES = {
     MULTI_BALL: 'multiBall',
     EXPLOSIVE: 'explosive'
 };
-const TYPE_COLORS = {
-    [TYPES.NORMAL]: '#00f0ff',    
-    [TYPES.BIG_BALL]: '#ffcc00',  
-    [TYPES.MULTI_BALL]: '#00ff66', 
-    [TYPES.EXPLOSIVE]: '#ff0055'  
-};
 
 let bricks = [];
-let rowDropInterval = 8000; // Wall drops every 8 seconds
+let rowDropInterval = 5500; // ACCELERATED ACTION: Drops every 5.5 seconds instead of 8
 let lastDropTime = Date.now();
 
-function initGame() {
+function createNewBall(x, y, dx, dy, radius = baseBallRadius) {
+    return { x, y, dx, dy, radius };
+}
+
+function createBrick() {
+    // Balanced 15% rate for crystal structures
+    let type = TYPES.NORMAL;
+    const rand = Math.random();
+    if (rand > 0.85) { 
+        const types = [TYPES.BIG_BALL, TYPES.MULTI_BALL, TYPES.EXPLOSIVE];
+        type = types[Math.floor(Math.random() * types.length)];
+    }
+    return { status: 1, type: type };
+}
+
+function startGame() {
+    startScreen.classList.add("hidden");
+    gameOverScreen.classList.add("hidden");
+    
     score = 0;
     gameOver = false;
-    scoreDisplay.innerText = score;
-    rowDropInterval = 8000;
+    gameActive = true;
+    rowDropInterval = 5500;
+    scoreDisplay.innerText = "0000";
     paddleX = (canvas.width - paddleWidth) / 2;
     
-    // Spawn initial ball
-    balls = [createNewBall(canvas.width / 2, paddleY - 30, 2.5, -baseBallSpeed)];
+    balls = [createNewBall(canvas.width / 2, paddleY - 20, 2.5, -baseBallSpeed)];
     
-    // Create initial brick wall
+    // Construct initial grid layout (3 clean rows to build momentum)
     bricks = [];
-    for (let r = 0; r < brickRowCount; r++) {
+    for (let r = 0; r < 4; r++) {
         bricks[r] = [];
         for (let c = 0; c < brickColumnCount; c++) {
             bricks[r][c] = createBrick();
@@ -110,35 +227,22 @@ function initGame() {
     lastDropTime = Date.now();
 }
 
-function createNewBall(x, y, dx, dy, radius = baseBallRadius) {
-    return { x, y, dx, dy, radius };
-}
-
-function createBrick() {
-    // 15% drop rate for special items (balanced difficulty)
-    let type = TYPES.NORMAL;
-    const rand = Math.random();
-    if (rand > 0.85) { 
-        const types = [TYPES.BIG_BALL, TYPES.MULTI_BALL, TYPES.EXPLOSIVE];
-        type = types[Math.floor(Math.random() * types.length)];
-    }
-    return { x: 0, y: 0, status: 1, type: type };
-}
-
 function dropWallDown() {
+    if (!gameActive || gameOver) return;
+
     let newRow = [];
     for (let c = 0; c < brickColumnCount; c++) {
         newRow.push(createBrick()); 
     }
-    bricks.unshift(newRow); // Push rows downward
+    bricks.unshift(newRow); 
 
-    // If dropping wall reaches your paddle height -> Game Over
+    // Perimeter threshold logic checks for failure states
     for (let r = 0; r < bricks.length; r++) {
         for (let c = 0; c < bricks[r].length; c++) {
             if (bricks[r][c] && bricks[r][c].status === 1) {
                 let brickY = (r * (brickHeight + brickPadding)) + brickOffsetTop;
-                if (brickY + brickHeight >= paddleY - 5) {
-                    gameOver = true;
+                if (brickY + brickHeight >= paddleY - 10) {
+                    endGame();
                 }
             }
         }
@@ -147,13 +251,12 @@ function dropWallDown() {
 
 function triggerBuff(type, hitRow, hitCol) {
     if (type === TYPES.BIG_BALL) {
-        balls.forEach(b => b.radius = 14);
-        setTimeout(() => balls.forEach(b => b.radius = baseBallRadius), 6000);
+        balls.forEach(b => b.radius = 13);
+        setTimeout(() => balls.forEach(b => b.radius = baseBallRadius), 7000);
     } 
     else if (type === TYPES.MULTI_BALL) {
-        // Multi-ball splits from your active paddle position
-        balls.push(createNewBall(paddleX + paddleWidth / 2, paddleY - 10, -3, -4));
-        balls.push(createNewBall(paddleX + paddleWidth / 2, paddleY - 10, 3, -4));
+        balls.push(createNewBall(paddleX + paddleWidth / 2, paddleY - 10, -3.5, -4.5));
+        balls.push(createNewBall(paddleX + paddleWidth / 2, paddleY - 10, 3.5, -4.5));
     } 
     else if (type === TYPES.EXPLOSIVE) {
         for (let dr = -1; dr <= 1; dr++) {
@@ -162,7 +265,7 @@ function triggerBuff(type, hitRow, hitCol) {
                 let nc = hitCol + dc;
                 if (bricks[nr] && bricks[nr][nc] && bricks[nr][nc].status === 1) {
                     bricks[nr][nc].status = 0;
-                    score += 10;
+                    score += 15;
                 }
             }
         }
@@ -173,18 +276,26 @@ function collisionDetection() {
     for (let r = 0; r < bricks.length; r++) {
         for (let c = 0; c < bricks[r].length; c++) {
             let b = bricks[r][c];
-            if (b.status === 1) {
+            if (b && b.status === 1) {
                 let brickX = (c * (brickWidth + brickPadding)) + brickOffsetLeft;
                 let brickY = (r * (brickHeight + brickPadding)) + brickOffsetTop;
-                b.x = brickX;
-                b.y = brickY;
 
                 balls.forEach(ball => {
                     if (ball.x > brickX && ball.x < brickX + brickWidth && ball.y > brickY && ball.y < brickY + brickHeight) {
-                        ball.dy = -ball.dy;
+                        
+                        // Calculate clean vector reflection bounce
+                        let fromTop = Math.abs(ball.y - brickY);
+                        let fromBottom = Math.abs(ball.y - (brickY + brickHeight));
+                        let fromLeft = Math.abs(ball.x - brickX);
+                        let fromRight = Math.abs(ball.x - (brickX + brickWidth));
+                        let min = Math.min(fromTop, fromBottom, fromLeft, fromRight);
+
+                        if (min === fromTop || min === fromBottom) ball.dy = -ball.dy;
+                        else ball.dx = -ball.dx;
+
                         b.status = 0;
                         score += 10;
-                        scoreDisplay.innerText = score;
+                        scoreDisplay.innerText = String(score).padStart(4, '0');
                         triggerBuff(b.type, r, c);
                     }
                 });
@@ -193,118 +304,156 @@ function collisionDetection() {
     }
 }
 
-// --- CONTROLS: FOR BOTH MOBILE AND DESKTOP ---
+// --- ARTISTIC GEM-STYLE RENDERING PIPELINE ---
+function drawBrick(ctx, x, y, width, height, type) {
+    ctx.save();
+    
+    // Drop shadow adjustments
+    ctx.shadowOffsetY = 4;
+    ctx.shadowBlur = 6;
+
+    if (type === TYPES.NORMAL) {
+        ctx.fillStyle = '#1e293b';
+        ctx.strokeStyle = '#00f0ff';
+        ctx.shadowColor = 'rgba(0, 240, 255, 0.2)';
+    } else if (type === TYPES.EXPLOSIVE) {
+        ctx.fillStyle = '#2d121e';
+        ctx.strokeStyle = '#ff0055';
+        ctx.shadowColor = 'rgba(255, 0, 85, 0.3)';
+    } else if (type === TYPES.MULTI_BALL) {
+        ctx.fillStyle = '#122d21';
+        ctx.strokeStyle = '#00ff66';
+        ctx.shadowColor = 'rgba(0, 255, 102, 0.3)';
+    } else if (type === TYPES.BIG_BALL) {
+        ctx.fillStyle = '#2d2712';
+        ctx.strokeStyle = '#ffcc00';
+        ctx.shadowColor = 'rgba(255, 204, 0, 0.3)';
+    }
+
+    // Outer geometric frame layout
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(x, y, width, height, 6);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+
+    // Render Unique Inner Crystal Geometry Patterns
+    if (type !== TYPES.NORMAL) {
+        ctx.save();
+        ctx.lineWidth = 2;
+        let cx = x + width / 2;
+        let cy = y + height / 2;
+
+        if (type === TYPES.EXPLOSIVE) {
+            // Frag Pattern Cross Core
+            ctx.strokeStyle = '#ff0055';
+            ctx.beginPath();
+            ctx.moveTo(cx - 6, cy - 6); ctx.lineTo(cx + 6, cy + 6);
+            ctx.moveTo(cx + 6, cy - 6); ctx.lineTo(cx - 6, cy + 6);
+            ctx.stroke();
+        } 
+        else if (type === TYPES.MULTI_BALL) {
+            // Dual Particle Core Signature
+            ctx.fillStyle = '#00ff66';
+            ctx.beginPath();
+            ctx.arc(cx - 4, cy, 3, 0, Math.PI * 2);
+            ctx.arc(cx + 4, cy, 3, 0, Math.PI * 2);
+            ctx.fill();
+        } 
+        else if (type === TYPES.BIG_BALL) {
+            // Orbital Ring Signature
+            ctx.strokeStyle = '#ffcc00';
+            ctx.beginPath();
+            ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
+}
 
 function movePaddle(clientX) {
+    if (!gameActive || gameOver) return;
     const rect = canvas.getBoundingClientRect();
-    // Convert click/touch coordinates relative to the scaling canvas
     const relativeX = (clientX - rect.left) * (canvas.width / rect.width);
     
-    // Snap paddle center to the mouse/finger position
     paddleX = relativeX - paddleWidth / 2;
-    
-    // Bounds check so paddle never goes off screen edges
     if (paddleX < 0) paddleX = 0;
     if (paddleX > canvas.width - paddleWidth) paddleX = canvas.width - paddleWidth;
 }
 
-// Mouse Controls
-window.addEventListener("mousemove", (e) => {
-    if (!gameOver) movePaddle(e.clientX);
-});
-
-// Touch Controls (Mobile dragging)
+// Global Tracking Event Layouts
+window.addEventListener("mousemove", (e) => movePaddle(e.clientX));
 window.addEventListener("touchmove", (e) => {
-    if (!gameOver && e.touches.length > 0) {
-        movePaddle(e.touches[0].clientX);
-    }
+    if (e.touches.length > 0) movePaddle(e.touches[0].clientX);
 }, { passive: false });
 
-// Global Tap-to-Restart Trigger
-function handleRestart() {
-    if (gameOver) initGame();
+function endGame() {
+    gameOver = true;
+    gameActive = false;
+    finalScoreDisplay.innerText = `Final Score: ${String(score).padStart(4, '0')}`;
+    gameOverScreen.classList.remove("hidden");
 }
-window.addEventListener("click", handleRestart);
-window.addEventListener("touchstart", (e) => {
-    handleRestart();
-});
 
-
-function draw() {
-    if (gameOver) {
-        ctx.fillStyle = "rgba(10,10,15,0.92)";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.font = "bold 28px sans-serif";
-        ctx.fillStyle = "#ff0055";
-        ctx.textAlign = "center";
-        ctx.fillText("WALL CRUSH OVERRIDE", canvas.width / 2, canvas.height / 2 - 20);
-        
-        ctx.font = "20px sans-serif";
-        ctx.fillStyle = "#ffffff";
-        ctx.fillText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 + 20);
-        
-        ctx.font = "16px sans-serif";
-        ctx.fillStyle = "#00f0ff";
-        ctx.fillText("Tap or Click to Restart", canvas.width / 2, canvas.height / 2 + 70);
-        
-        requestAnimationFrame(draw);
+function updateFrame() {
+    if (!gameActive) {
+        requestAnimationFrame(updateFrame);
         return;
     }
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.textAlign = "left";
 
-    // 1. Render Brick Wall
+    // 1. Draw Crystals
     for (let r = 0; r < bricks.length; r++) {
         for (let c = 0; c < bricks[r].length; c++) {
-            if (bricks[r][c].status === 1) {
+            if (bricks[r][c] && bricks[r][c].status === 1) {
                 let brickX = (c * (brickWidth + brickPadding)) + brickOffsetLeft;
                 let brickY = (r * (brickHeight + brickPadding)) + brickOffsetTop;
-                ctx.beginPath();
-                ctx.rect(brickX, brickY, brickWidth, brickHeight);
-                ctx.fillStyle = TYPE_COLORS[bricks[r][c].type];
-                ctx.fill();
-                ctx.closePath();
+                drawBrick(ctx, brickX, brickY, brickWidth, brickHeight, bricks[r][c].type);
             }
         }
     }
 
-    // 2. Render Your Movable Bottom Brick (Paddle)
+    // 2. Render Modern Neon Paddle Core
+    ctx.save();
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = '#ffffff';
+    ctx.fillStyle = '#ffffff';
     ctx.beginPath();
-    ctx.rect(paddleX, paddleY, paddleWidth, paddleHeight);
-    ctx.fillStyle = "#ffffff";
+    ctx.roundRect(paddleX, paddleY, paddleWidth, paddleHeight, 7);
     ctx.fill();
-    ctx.closePath();
+    ctx.restore();
 
-    // 3. Render and Calculate Ball Movement
+    // 3. Energy Orbs Processing Loop
     for (let i = balls.length - 1; i >= 0; i--) {
         let ball = balls[i];
         
+        ctx.save();
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = '#00f0ff';
+        ctx.fillStyle = '#ffffff'; 
         ctx.beginPath();
         ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
-        ctx.fillStyle = "#ffffff"; 
         ctx.fill();
-        ctx.closePath();
+        ctx.restore();
 
-        // Bounce left / right walls
+        // Canvas Borders
         if (ball.x + ball.dx > canvas.width - ball.radius || ball.x + ball.dx < ball.radius) {
             ball.dx = -ball.dx;
         }
-        // Bounce ceiling
         if (ball.y + ball.dy < ball.radius) {
             ball.dy = -ball.dy;
         } 
 
-        // Hit logic for your movable paddle
+        // Paddle intercept geometry check
         if (ball.y + ball.dy > paddleY - ball.radius && ball.y < paddleY + paddleHeight) {
             if (ball.x > paddleX && ball.x < paddleX + paddleWidth) {
                 let hitPoint = ball.x - (paddleX + paddleWidth / 2);
-                ball.dx = hitPoint * 0.18; // Angles away depending on where you catch it
+                ball.dx = hitPoint * 0.22; 
                 ball.dy = -Math.abs(ball.dy); 
             } 
         }
 
-        // Out of bounds drop check
         if (ball.y > canvas.height) {
             balls.splice(i, 1);
             continue;
@@ -315,24 +464,23 @@ function draw() {
     }
 
     if (balls.length === 0) {
-        gameOver = true;
+        endGame();
     }
 
     collisionDetection();
 
-    // Automatic Wall Progression
+    // Accelerated Descent Wall Engine
     if (Date.now() - lastDropTime > rowDropInterval) {
         dropWallDown();
         lastDropTime = Date.now();
-        if (rowDropInterval > 3500) rowDropInterval -= 250; // Slowly accelerates over time
+        if (rowDropInterval > 2200) rowDropInterval -= 250; // Scales speed continuously
     }
 
-    requestAnimationFrame(draw);
+    requestAnimationFrame(updateFrame);
 }
 
-// Run Engine
-initGame();
-draw();
+// Init Animation Frame
+requestAnimationFrame(updateFrame);
 </script>
 
 </body>
