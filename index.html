@@ -1,525 +1,312 @@
 <!DOCTYPE html>
-
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Infinite Breakout</title>
-<style>
-* { margin:0; padding:0; box-sizing:border-box; }
-body {
-  background:#05051a;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  justify-content:center;
-  height:100vh;
-  overflow:hidden;
-  font-family:monospace;
-  color:#0ff;
-}
-#info {
-  display:flex;
-  gap:24px;
-  font-size:13px;
-  letter-spacing:2px;
-  margin-bottom:6px;
-  text-transform:uppercase;
-}
-#dangerWrap {
-  width:480px;
-  height:5px;
-  background:#111;
-  border:1px solid #333;
-  margin-bottom:4px;
-}
-#dangerBar { height:100%; width:0%; background:linear-gradient(90deg,#0f0,#ff0,#f00); transition:width 0.2s; }
-#wrap { position:relative; }
-canvas { display:block; border:1px solid #1a1a4a; cursor:none; }
-#overlay {
-  position:absolute;
-  inset:0;
-  background:rgba(5,5,26,0.88);
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  justify-content:center;
-  gap:14px;
-}
-#overlay h2 { font-size:28px; letter-spacing:4px; color:#0ff; text-shadow:0 0 20px #0ff; }
-#overlay p  { font-size:12px; color:#888; letter-spacing:2px; text-align:center; line-height:1.8; }
-#overlay button {
-  margin-top:8px;
-  padding:10px 32px;
-  background:transparent;
-  border:2px solid #0ff;
-  color:#0ff;
-  font-family:monospace;
-  font-size:13px;
-  letter-spacing:3px;
-  cursor:pointer;
-  text-transform:uppercase;
-}
-#overlay button:hover { background:#0ff; color:#000; }
-#pu-tray { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-top:5px; min-height:22px; max-width:480px; }
-.pub { font-size:11px; padding:2px 8px; border:1px solid; border-radius:2px; letter-spacing:1px; animation:pop .2s; }
-@keyframes pop { from{transform:scale(0.7);opacity:0} to{transform:scale(1);opacity:1} }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Infinite Breakout Survival</title>
+    <style>
+        body {
+            background-color: #111;
+            color: white;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+        canvas {
+            border: 4px solid #fff;
+            background-color: #222;
+            box-shadow: 0 0 20px rgba(255,255,255,0.2);
+        }
+        #scoreBoard {
+            font-size: 24px;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+    </style>
 </head>
 <body>
 
-<div id="info">
-  <span>SCORE: <b id="sv">0</b></span>
-  <span>BALLS: <b id="bv">1</b></span>
-  <span>LEVEL: <b id="lv">1</b></span>
-</div>
-<div id="dangerWrap"><div id="dangerBar"></div></div>
-<div id="wrap">
-  <canvas id="c"></canvas>
-  <div id="overlay">
-    <h2 id="otitle">INFINITE BREAKOUT</h2>
-    <p id="osub">Move mouse to control paddle.<br>Click or press SPACE to launch ball.<br>Don't let the wall reach your paddle!</p>
-    <div id="oscore" style="color:#ff0;font-size:16px;display:none"></div>
-    <button onclick="startGame()">PLAY</button>
-  </div>
-</div>
-<div id="pu-tray"></div>
+    <div id="scoreBoard">Score: <span id="score">0</span></div>
+    <canvas id="gameCanvas" width="480" height="600"></canvas>
 
 <script>
-const canvas = document.getElementById('c');
-const ctx = canvas.getContext('2d');
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+const scoreDisplay = document.getElementById("score");
 
-// Canvas size
-const CW = 480, CH = 600;
-canvas.width = CW;
-canvas.height = CH;
+// Game Settings
+let score = 0;
+let gameOver = false;
 
-// Layout constants
-const COLS = 10;
-const BG = 2;           // brick gap
-const BW = (CW - (COLS+1)*BG) / COLS;  // brick width
-const BH = 16;          // brick height
-const PADDLE_H = 12;
-const PADDLE_Y = CH - 28;
-const BASE_R = 8;
+// Paddle Settings
+const paddleHeight = 15;
+const paddleWidth = 80;
+let paddleX = (canvas.width - paddleWidth) / 2;
+let rightPressed = false;
+let leftPressed = false;
 
-// Power-up definitions
-const PU = {
-  BIG:   { label:'BIG BALL',    color:'#ff40a0', ch:'B' },
-  MULTI: { label:'MULTI BALL',  color:'#00f5ff', ch:'M' },
-  BLAST: { label:'BLAST',       color:'#aaff00', ch:'*' },
-  WIDE:  { label:'WIDE PADDLE', color:'#ffcc00', ch:'W' },
-  SLOW:  { label:'SLOW TIME',   color:'#bb44ff', ch:'S' },
-  FIRE:  { label:'FIREBALL',    color:'#ff6600', ch:'F' },
+// Ball Settings (Stored in an array for multi-ball buff)
+let balls = [];
+const baseBallRadius = 6;
+const baseBallSpeed = 4;
+
+// Brick Settings
+const brickRowCount = 4; // Initial rows
+const brickColumnCount = 6;
+const brickWidth = 70;
+const brickHeight = 20;
+const brickPadding = 5;
+const brickOffsetTop = 40;
+const brickOffsetLeft = 15;
+
+// Brick Types & Colors
+const TYPES = {
+    NORMAL: 'normal',
+    BIG_BALL: 'bigBall',
+    MULTI_BALL: 'multiBall',
+    EXPLOSIVE: 'explosive'
 };
-const PU_KEYS = Object.keys(PU);
+const TYPE_COLORS = {
+    [TYPES.NORMAL]: '#0095DD',
+    [TYPES.BIG_BALL]: '#FFD700', // Gold
+    [TYPES.MULTI_BALL]: '#00FF00', // Green
+    [TYPES.EXPLOSIVE]: '#FF4500'  // Red/Orange
+};
 
-// Game state
-let G = null;
-let running = false;
-let raf = null;
-let mouseX = CW/2;
+let bricks = [];
 
-canvas.addEventListener('mousemove', e => {
-  const r = canvas.getBoundingClientRect();
-  mouseX = (e.clientX - r.left) * (CW / r.width);
-});
-canvas.addEventListener('touchmove', e => {
-  e.preventDefault();
-  const r = canvas.getBoundingClientRect();
-  mouseX = (e.touches[0].clientX - r.left) * (CW / r.width);
-}, {passive:false});
-canvas.addEventListener('click', () => { if(running) launch(); });
-canvas.addEventListener('touchstart', e => { e.preventDefault(); if(running) launch(); }, {passive:false});
-window.addEventListener('keydown', e => { if(e.code==='Space'){ e.preventDefault(); if(running) launch(); }});
+// Timers for the Infinite Wall Mechanic
+let rowDropInterval = 8000; // Time (ms) before wall drops down
+let lastDropTime = Date.now();
 
-function launch() { G.balls.forEach(b => b.stuck = false); }
-
-function makeBrick(col, rowIdx) {
-  // ~16% power-up chance
-  const pu = Math.random() < 0.16 ? PU_KEYS[Math.floor(Math.random()*PU_KEYS.length)] : null;
-  const dur = (!pu && Math.random() < 0.18) ? 2 : 1;
-  return { col, rowIdx, pu, dur, maxDur:dur, alive:true, flash:0,
-    // world Y (before wallOffset added)
-    worldY: rowIdx * (BH + BG) };
-}
-
-function buildInitialBricks() {
-  const bricks = [];
-  const rows = Math.floor(CH * 0.45 / (BH+BG));
-  for (let r = 0; r < rows; r++)
-    for (let c = 0; c < COLS; c++)
-      bricks.push(makeBrick(c, r));
-  return bricks;
-}
+// --- INITIALIZATION ---
 
 function initGame() {
-  return {
-    score: 0,
-    level: 1,
-    frame: 0,
-    wallOffset: 0,
-    wallSpeed: 0.15,
-    nextRow: 160,
-    nextRowIdx: 0,   // set after init
-    bricks: buildInitialBricks(),
-    balls: [{
-      x: CW/2, y: PADDLE_Y - BASE_R - 2,
-      vx: 3, vy: -4,
-      r: BASE_R,
-      bigT: 0, fireT: 0, slowT: 0,
-      stuck: true
-    }],
-    paddle: { x: CW/2, w: CW*0.17, wideT: 0 },
-    particles: [],
-  };
-}
-
-function startGame() {
-  document.getElementById('overlay').style.display = 'none';
-  document.getElementById('pu-tray').innerHTML = '';
-  G = initGame();
-  // figure out how many rows were created
-  const rows = Math.floor(CH * 0.45 / (BH+BG));
-  G.nextRowIdx = rows;
-  running = true;
-  if(raf) cancelAnimationFrame(raf);
-  loop();
-}
-
-// Screen Y of brick top
-function brickScreenY(b) { return b.worldY + G.wallOffset; }
-function brickScreenX(b) { return BG + b.col * (BW + BG); }
-
-function spawnParticles(x, y, color, n=10) {
-  for(let i=0;i<n;i++){
-    const a = Math.random()*Math.PI*2;
-    const s = 1.5 + Math.random()*3;
-    G.particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,r:2+Math.random()*2,life:1,color});
-  }
-}
-
-function addPUBadge(key) {
-  const p = PU[key];
-  const el = document.createElement('div');
-  el.className='pub';
-  el.style.color=p.color;
-  el.style.borderColor=p.color;
-  el.textContent=p.ch+' '+p.label;
-  document.getElementById('pu-tray').appendChild(el);
-  setTimeout(()=>el.remove(), 2800);
-}
-
-function applyPU(key, ball) {
-  addPUBadge(key);
-  if(key==='BIG'){
-    G.balls.forEach(b=>{ b.bigT=400; b.r=BASE_R*1.9; });
-  } else if(key==='MULTI'){
-    const spd = Math.hypot(ball.vx, ball.vy);
-    for(let i=0;i<2;i++){
-      const a = -Math.PI/2 + (Math.random()-0.5)*1.4;
-      G.balls.push({x:ball.x,y:ball.y,vx:Math.cos(a)*spd,vy:Math.sin(a)*spd,
-        r:BASE_R,bigT:0,fireT:0,slowT:0,stuck:false});
+    score = 0;
+    gameOver = false;
+    balls = [createNewBall(canvas.width / 2, canvas.height - 50, baseBallSpeed, -baseBallSpeed)];
+    
+    // Generate Initial Bricks
+    bricks = [];
+    for (let r = 0; r < brickRowCount; r++) {
+        bricks[r] = [];
+        for (let c = 0; c < brickColumnCount; c++) {
+            bricks[r][c] = createBrick(r, c);
+        }
     }
-  } else if(key==='BLAST'){
-    // handled at hit point
-  } else if(key==='WIDE'){
-    G.paddle.wideT=450;
-    G.paddle.w=CW*0.30;
-  } else if(key==='SLOW'){
-    G.balls.forEach(b=>b.slowT=380);
-  } else if(key==='FIRE'){
-    G.balls.forEach(b=>b.fireT=350);
-  }
+    lastDropTime = Date.now();
 }
 
-function blastAround(brick) {
-  G.bricks.forEach(b => {
-    if(!b.alive) return;
-    if(Math.abs(b.rowIdx-brick.rowIdx)<=1 && Math.abs(b.col-brick.col)<=1){
-      b.alive=false;
-      G.score+=12;
-      spawnParticles(brickScreenX(b)+BW/2, brickScreenY(b)+BH/2, PU.BLAST.color, 14);
-    }
-  });
+function createNewBall(x, y, dx, dy, radius = baseBallRadius) {
+    return { x, y, dx, dy, radius };
 }
 
-function collideBallBricks(ball) {
-  for(let i=0;i<G.bricks.length;i++){
-    const b = G.bricks[i];
-    if(!b.alive) continue;
-    const bx = brickScreenX(b);
-    const by = brickScreenY(b);
-    // Skip if obviously far
-    if(ball.x+ball.r < bx || ball.x-ball.r > bx+BW) continue;
-    if(ball.y+ball.r < by || ball.y-ball.r > by+BH) continue;
-    // Closest point
-    const cx = Math.max(bx, Math.min(ball.x, bx+BW));
-    const cy = Math.max(by, Math.min(ball.y, by+BH));
-    const dx = ball.x-cx, dy = ball.y-cy;
-    if(dx*dx+dy*dy > ball.r*ball.r) continue;
-
-    // Bounce (unless fireball)
-    if(!ball.fireT) {
-      const ol = (ball.x+ball.r)-bx;
-      const or_ = (bx+BW)-(ball.x-ball.r);
-      const ot = (ball.y+ball.r)-by;
-      const ob = (by+BH)-(ball.y-ball.r);
-      const mh = Math.min(ol,or_), mv = Math.min(ot,ob);
-      if(mh < mv) ball.vx=-ball.vx; else ball.vy=-ball.vy;
+function createBrick(row, col) {
+    // 25% chance of being a special buff brick
+    let type = TYPES.NORMAL;
+    const rand = Math.random();
+    if (rand > 0.75) {
+        const types = [TYPES.BIG_BALL, TYPES.MULTI_BALL, TYPES.EXPLOSIVE];
+        type = types[Math.floor(Math.random() * types.length)];
     }
-
-    b.dur--;
-    b.flash=8;
-    if(b.dur<=0){
-      b.alive=false;
-      G.score += b.pu ? 25 : 10;
-      const col = b.pu ? PU[b.pu].color : '#4488cc';
-      spawnParticles(brickScreenX(b)+BW/2, brickScreenY(b)+BH/2, col, b.pu?18:8);
-      if(b.pu==='BLAST') blastAround(b);
-      else if(b.pu) applyPU(b.pu, ball);
-    }
-    if(!ball.fireT) break;
-  }
+    return { x: 0, y: 0, status: 1, type: type };
 }
 
-function update() {
-  G.frame++;
+// --- WALL PROGRESSION (The Twist!) ---
 
-  // Paddle
-  const pw = G.paddle.w;
-  G.paddle.x = Math.max(pw/2+2, Math.min(CW-pw/2-2, mouseX));
-  if(G.paddle.wideT>0){ G.paddle.wideT--; if(G.paddle.wideT===0) G.paddle.w=CW*0.17; }
+function dropWallDown() {
+    // 1. Move all existing rows down by adding a new row at index 0
+    let newRow = [];
+    for (let c = 0; c < brickColumnCount; c++) {
+        newRow.push({ x: 0, y: 0, status: 1, type: TYPES.NORMAL }); // Top row standard, or randomize
+    }
+    bricks.unshift(newRow); // Push existing rows down sequentially
 
-  // Wall speed / level
-  G.level = 1 + Math.floor(G.score/250);
-  G.wallSpeed = 0.15 + G.level*0.05;
-  G.wallOffset += G.wallSpeed;
+    // 2. Check for Game Over condition
+    // If any active brick crosses the paddle threshold line, it's game over
+    for (let r = 0; r < bricks.length; r++) {
+        for (let c = 0; c < bricks[r].length; c++) {
+            if (bricks[r][c].status === 1) {
+                let brickY = (r * (brickHeight + brickPadding)) + brickOffsetTop;
+                if (brickY + brickHeight >= canvas.height - paddleHeight - 20) {
+                    gameOver = true;
+                }
+            }
+        }
+    }
+}
 
-  // Add new row from top
-  if(G.frame >= G.nextRow){
-    for(let c=0;c<COLS;c++)
-      G.bricks.push(makeBrick(c, G.nextRowIdx));
-    G.nextRowIdx++;
-    G.nextRow = G.frame + Math.max(70, 160 - G.level*10);
-  }
+// --- INPUT HANDLERS ---
 
-  // Danger check: lowest alive brick screen Y
-  let lowestY = 0;
-  G.bricks.forEach(b => { if(b.alive) lowestY=Math.max(lowestY, brickScreenY(b)+BH); });
-  const dangerZone = PADDLE_Y - 14;
-  const danger = Math.min(1, Math.max(0, lowestY/dangerZone));
-  document.getElementById('dangerBar').style.width = (danger*100)+'%';
-  if(lowestY >= dangerZone){ endGame(); return; }
+document.addEventListener("keydown", (e) => {
+    if (e.key === "Right" || e.key === "ArrowRight") rightPressed = true;
+    if (e.key === "Left" || e.key === "ArrowLeft") leftPressed = true;
+});
+document.addEventListener("keyup", (e) => {
+    if (e.key === "Right" || e.key === "ArrowRight") rightPressed = false;
+    if (e.key === "Left" || e.key === "ArrowLeft") leftPressed = false;
+});
 
-  // Prune off-screen bricks
-  G.bricks = G.bricks.filter(b => brickScreenY(b) < CH+50);
+// --- BUFF LOGIC ---
 
-  // Balls
-  G.balls = G.balls.filter(ball => {
-    // Expire timers
-    if(ball.bigT>0){ ball.bigT--; if(ball.bigT===0) ball.r=BASE_R; }
-    if(ball.fireT>0) ball.fireT--;
-    if(ball.slowT>0) ball.slowT--;
+function triggerBuff(type, hitRow, hitCol) {
+    if (type === TYPES.BIG_BALL) {
+        // Enlarge all existing balls temporarily
+        balls.forEach(b => b.radius = 12);
+        setTimeout(() => balls.forEach(b => b.radius = baseBallRadius), 8000);
+    } 
+    else if (type === TYPES.MULTI_BALL) {
+        // Spawn 2 extra balls at the paddle going upwards
+        balls.push(createNewBall(paddleX + paddleWidth/2, canvas.height - 30, -3, -4));
+        balls.push(createNewBall(paddleX + paddleWidth/2, canvas.height - 30, 3, -4));
+    } 
+    else if (type === TYPES.EXPLOSIVE) {
+        // Destroy adjacent bricks (Up, Down, Left, Right)
+        const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+        directions.forEach(([dr, dc]) => {
+            let nr = hitRow + dr;
+            let nc = hitCol + dc;
+            if (bricks[nr] && bricks[nr][nc] && bricks[nr][nc].status === 1) {
+                bricks[nr][nc].status = 0;
+                score += 10;
+            }
+        });
+    }
+}
 
-    if(ball.stuck){
-      ball.x = G.paddle.x;
-      ball.y = PADDLE_Y - ball.r - 2;
-      return true;
+// --- COLLISION DETECTION ---
+
+function collisionDetection() {
+    for (let r = 0; r < bricks.length; r++) {
+        for (let c = 0; c < bricks[r].length; c++) {
+            let b = bricks[r][c];
+            if (b.status === 1) {
+                let brickX = (c * (brickWidth + brickPadding)) + brickOffsetLeft;
+                let brickY = (r * (brickHeight + brickPadding)) + brickOffsetTop;
+                b.x = brickX;
+                b.y = brickY;
+
+                balls.forEach(ball => {
+                    if (ball.x > brickX && ball.x < brickX + brickWidth && ball.y > brickY && ball.y < brickY + brickHeight) {
+                        ball.dy = -ball.dy;
+                        b.status = 0; // Destroy brick
+                        score += 10;
+                        scoreDisplay.innerText = score;
+                        
+                        triggerBuff(b.type, r, c);
+                    }
+                });
+            }
+        }
+    }
+}
+
+// --- GAME LOOP ---
+
+function draw() {
+    if (gameOver) {
+        ctx.fillStyle = "rgba(0,0,0,0.75)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.font = "30px sans-serif";
+        ctx.fillStyle = "red";
+        ctx.fillText("GAME OVER", canvas.width / 2 - 90, canvas.height / 2);
+        ctx.font = "16px sans-serif";
+        ctx.fillStyle = "white";
+        ctx.fillText("Refresh page to try again!", canvas.width / 2 - 85, canvas.height / 2 + 40);
+        return;
     }
 
-    const spd = ball.slowT>0 ? 0.55 : 1;
-    ball.x += ball.vx * spd;
-    ball.y += ball.vy * spd;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Wall bounces
-    if(ball.x-ball.r < 0){ ball.x=ball.r; ball.vx=Math.abs(ball.vx); }
-    if(ball.x+ball.r > CW){ ball.x=CW-ball.r; ball.vx=-Math.abs(ball.vx); }
-    if(ball.y-ball.r < 0){ ball.y=ball.r; ball.vy=Math.abs(ball.vy); }
-
-    // Paddle hit
-    if(ball.vy>0
-      && ball.y+ball.r >= PADDLE_Y
-      && ball.y-ball.r <= PADDLE_Y+PADDLE_H
-      && ball.x >= G.paddle.x - pw/2 - ball.r
-      && ball.x <= G.paddle.x + pw/2 + ball.r){
-      ball.y = PADDLE_Y - ball.r;
-      const rel = (ball.x - G.paddle.x) / (pw/2); // -1..1
-      const spd2 = Math.min(7.5, Math.hypot(ball.vx,ball.vy)+0.06);
-      ball.vx = rel * spd2 * 0.9;
-      ball.vy = -Math.sqrt(spd2*spd2 - ball.vx*ball.vx) || -spd2;
-      if(Math.abs(ball.vy)<2) ball.vy=-2;
-      spawnParticles(ball.x, PADDLE_Y, '#00f5ff', 5);
+    // 1. Draw Bricks
+    for (let r = 0; r < bricks.length; r++) {
+        for (let c = 0; c < bricks[r].length; c++) {
+            if (bricks[r][c].status === 1) {
+                let brickX = (c * (brickWidth + brickPadding)) + brickOffsetLeft;
+                let brickY = (r * (brickHeight + brickPadding)) + brickOffsetTop;
+                ctx.beginPath();
+                ctx.rect(brickX, brickY, brickWidth, brickHeight);
+                ctx.fillStyle = TYPE_COLORS[bricks[r][c].type];
+                ctx.fill();
+                ctx.closePath();
+            }
+        }
     }
 
-    // Fell off
-    if(ball.y - ball.r > CH+10) return false;
-
-    collideBallBricks(ball);
-    return true;
-  });
-
-  if(G.balls.length===0){ endGame(); return; }
-
-  // Particles
-  G.particles.forEach(p=>{ p.x+=p.vx; p.y+=p.vy; p.vy+=0.12; p.life-=0.03; });
-  G.particles = G.particles.filter(p=>p.life>0);
-
-  // HUD
-  document.getElementById('sv').textContent = G.score;
-  document.getElementById('bv').textContent = G.balls.length;
-  document.getElementById('lv').textContent = G.level;
-}
-
-function endGame(){
-  running = false;
-  const ov = document.getElementById('overlay');
-  document.getElementById('otitle').textContent = 'GAME OVER';
-  document.getElementById('otitle').style.color = '#f05';
-  document.getElementById('osub').textContent = 'The wall reached your paddle.';
-  const os = document.getElementById('oscore');
-  os.style.display='block';
-  os.textContent='SCORE: '+G.score;
-  document.getElementById('overlay').querySelector('button').textContent='PLAY AGAIN';
-  ov.style.display='flex';
-}
-
-// ---- DRAW ----
-function drawBrick(b){
-  const bx=brickScreenX(b), by=brickScreenY(b);
-  if(by+BH<0||by>CH) return;
-
-  let col = '#336699';
-  if(b.pu) col = PU[b.pu].color;
-  else if(b.maxDur>=2) col = b.dur>=2?'#5577cc':'#334488';
-  else {
-    const h = ((b.rowIdx*37+b.col*11)%200)+160;
-    col = `hsl(${h},55%,44%)`;
-  }
-
-  if(b.flash>0){ b.flash--; ctx.shadowBlur=18; ctx.shadowColor=col; }
-  else { ctx.shadowBlur=4; ctx.shadowColor=col+'88'; }
-
-  const g = ctx.createLinearGradient(bx,by,bx,by+BH);
-  g.addColorStop(0, col+'ee');
-  g.addColorStop(1, col+'66');
-  ctx.fillStyle=g;
-  ctx.fillRect(bx,by,BW,BH);
-
-  ctx.fillStyle='rgba(255,255,255,0.13)';
-  ctx.fillRect(bx,by,BW,3);
-
-  ctx.strokeStyle=col;
-  ctx.lineWidth=1;
-  ctx.strokeRect(bx+0.5,by+0.5,BW-1,BH-1);
-
-  ctx.shadowBlur=0;
-
-  if(b.pu){
-    ctx.fillStyle='#fff';
-    ctx.font=`bold ${Math.floor(BH*0.65)}px monospace`;
-    ctx.textAlign='center';
-    ctx.textBaseline='middle';
-    ctx.fillText(PU[b.pu].ch, bx+BW/2, by+BH/2);
-  } else if(b.maxDur>=2){
-    ctx.fillStyle='rgba(255,255,255,0.55)';
-    ctx.font=`bold ${Math.floor(BH*0.6)}px monospace`;
-    ctx.textAlign='center';
-    ctx.textBaseline='middle';
-    ctx.fillText(b.dur, bx+BW/2, by+BH/2);
-  }
-}
-
-function drawBall(ball){
-  const col = ball.fireT>0?'#ff6600': ball.bigT>0?'#ff40a0': ball.slowT>0?'#bb44ff':'#00f5ff';
-  ctx.save();
-  ctx.shadowBlur=18; ctx.shadowColor=col;
-  const g=ctx.createRadialGradient(ball.x-ball.r*0.3,ball.y-ball.r*0.3,1,ball.x,ball.y,ball.r);
-  g.addColorStop(0,'#fff');
-  g.addColorStop(0.45,col);
-  g.addColorStop(1,col+'55');
-  ctx.fillStyle=g;
-  ctx.beginPath();
-  ctx.arc(ball.x,ball.y,ball.r,0,Math.PI*2);
-  ctx.fill();
-  ctx.restore();
-}
-
-function drawPaddle(){
-  const p=G.paddle;
-  const x=p.x-p.w/2, y=PADDLE_Y;
-  const col = p.wideT>0?'#ffcc00':'#00f5ff';
-  ctx.save();
-  ctx.shadowBlur=16; ctx.shadowColor=col;
-  const g=ctx.createLinearGradient(x,y,x,y+PADDLE_H);
-  g.addColorStop(0,col+'ee'); g.addColorStop(1,col+'55');
-  ctx.fillStyle=g;
-  const r=5;
-  ctx.beginPath();
-  ctx.moveTo(x+r,y);
-  ctx.lineTo(x+p.w-r,y);
-  ctx.arcTo(x+p.w,y,x+p.w,y+r,r);
-  ctx.lineTo(x+p.w,y+PADDLE_H-r);
-  ctx.arcTo(x+p.w,y+PADDLE_H,x+p.w-r,y+PADDLE_H,r);
-  ctx.lineTo(x+r,y+PADDLE_H);
-  ctx.arcTo(x,y+PADDLE_H,x,y+PADDLE_H-r,r);
-  ctx.lineTo(x,y+r);
-  ctx.arcTo(x,y,x+r,y,r);
-  ctx.closePath();
-  ctx.fill();
-  ctx.strokeStyle=col; ctx.lineWidth=1.5; ctx.stroke();
-  ctx.restore();
-}
-
-function drawParticles(){
-  G.particles.forEach(p=>{
-    ctx.save();
-    ctx.globalAlpha=p.life;
-    ctx.fillStyle=p.color;
-    ctx.shadowBlur=6; ctx.shadowColor=p.color;
+    // 2. Draw Paddle
     ctx.beginPath();
-    ctx.arc(p.x,p.y,p.r*p.life,0,Math.PI*2);
+    ctx.rect(paddleX, canvas.height - paddleHeight - 10, paddleWidth, paddleHeight);
+    ctx.fillStyle = "#fff";
     ctx.fill();
-    ctx.restore();
-  });
+    ctx.closePath();
+
+    // 3. Draw & Move Balls
+    for (let i = balls.length - 1; i >= 0; i--) {
+        let ball = balls[i];
+        
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+        ctx.fillStyle = "#FF007F"; // Neon pink ball
+        ctx.fill();
+        ctx.closePath();
+
+        // Bounce off Left/Right walls
+        if (ball.x + ball.dx > canvas.width - ball.radius || ball.x + ball.dx < ball.radius) {
+            ball.dx = -ball.dx;
+        }
+        // Bounce off Top wall
+        if (ball.y + ball.dy < ball.radius) {
+            ball.dy = -ball.dy;
+        } 
+        // Bottom tracking (Paddle bounce or fall out)
+        else if (ball.y + ball.dy > canvas.height - paddleHeight - 10 - ball.radius) {
+            if (ball.x > paddleX && ball.x < paddleX + paddleWidth) {
+                // Change angle slightly based on where it hit the paddle
+                let hitPoint = ball.x - (paddleX + paddleWidth / 2);
+                ball.dx = hitPoint * 0.15;
+                ball.dy = -ball.dy;
+            } else if (ball.y > canvas.height) {
+                // Remove ball if it falls past the bottom
+                balls.splice(i, 1);
+                continue; 
+            }
+        }
+
+        ball.x += ball.dx;
+        ball.y += ball.dy;
+    }
+
+    // Game Over if all balls are lost
+    if (balls.length === 0) {
+        gameOver = true;
+    }
+
+    // 4. Handle Paddle Movement
+    if (rightPressed && paddleX < canvas.width - paddleWidth) paddleX += 7;
+    else if (leftPressed && paddleX > 0) paddleX -= 7;
+
+    // 5. Check Buffs/Collisions
+    collisionDetection();
+
+    // 6. Infinite Progression Logic: Drop the wall every X seconds
+    if (Date.now() - lastDropTime > rowDropInterval) {
+        dropWallDown();
+        lastDropTime = Date.now();
+        // Slightly speed up wall drops over time to increase difficulty
+        if (rowDropInterval > 3000) rowDropInterval -= 200; 
+    }
+
+    requestAnimationFrame(draw);
 }
 
-function drawGrid(){
-  ctx.save();
-  ctx.strokeStyle='rgba(0,200,255,0.035)';
-  ctx.lineWidth=1;
-  for(let x=0;x<CW;x+=40){ ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,CH);ctx.stroke(); }
-  for(let y=0;y<CH;y+=40){ ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(CW,y);ctx.stroke(); }
-  ctx.restore();
-}
-
-function drawDangerLine(){
-  ctx.save();
-  ctx.setLineDash([4,8]);
-  ctx.strokeStyle='rgba(255,0,80,0.18)';
-  ctx.lineWidth=1;
-  ctx.beginPath();
-  ctx.moveTo(0,PADDLE_Y-14);
-  ctx.lineTo(CW,PADDLE_Y-14);
-  ctx.stroke();
-  ctx.restore();
-}
-
-function draw(){
-  ctx.clearRect(0,0,CW,CH);
-  drawGrid();
-  drawDangerLine();
-  G.bricks.forEach(b=>{ if(b.alive) drawBrick(b); });
-  drawParticles();
-  G.balls.forEach(drawBall);
-  drawPaddle();
-}
-
-function loop(){
-  if(!running) return;
-  update();
-  draw();
-  raf=requestAnimationFrame(loop);
-}
+// Start Game
+initGame();
+draw();
 </script>
 
 </body>
